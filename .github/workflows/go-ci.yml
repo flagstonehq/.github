@@ -93,10 +93,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # In postgres:16-alpine the superuser is POSTGRES_USER (flagstone), not
+      # "postgres". Use that user to install citext before tests run.
       - name: Enable citext extension
-        run: psql -U postgres -d flagstone_test -c "CREATE EXTENSION IF NOT EXISTS citext;"
+        run: psql -U flagstone -d flagstone_test -c "CREATE EXTENSION IF NOT EXISTS citext;"
         env:
-          PGPASSWORD: ""
+          PGPASSWORD: test_password
           PGHOST: localhost
       - name: Run tests
         env:
