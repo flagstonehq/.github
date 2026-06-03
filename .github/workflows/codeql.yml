@@ -1,0 +1,55 @@
+# Reusable CodeQL security analysis for every flagstonehq repo.
+# Call it from a repo with:
+#
+#   jobs:
+#     security:
+#       uses: flagstonehq/.github/.github/workflows/codeql.yml@main
+#       with:
+#         language: go          # or javascript-typescript, python, etc.
+#
+# Runs on push to main and on a weekly schedule. Do NOT call this from your
+# PR workflow — CodeQL takes 10-15 min and would slow down every PR.
+# Run it separately so PR feedback stays fast.
+#
+name: CodeQL (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        description: "CodeQL language to analyze (go, javascript-typescript, python, …)"
+        type: string
+        default: go
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ inputs.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write  # required to upload SARIF results to GitHub
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ inputs.language }}
+          # Use the security-and-quality suite: covers all security queries plus
+          # quality checks. For Go this catches SQL injection, path traversal,
+          # command injection, log injection, unsafe deserialization, and more.
+          queries: security-and-quality
+
+      # For compiled languages (Go) CodeQL needs to observe the build.
+      # autobuild handles standard Go modules without any extra config.
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ inputs.language }}"
