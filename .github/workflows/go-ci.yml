@@ -20,28 +20,42 @@ on:
 permissions:
   contents: read
 
+# Pinned so the lint is reproducible and the compiled binary can be cached.
+env:
+  GOLANGCI_LINT_VERSION: v2.12.2
+
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      # Build golangci-lint with the project's own toolchain so its build
-      # version always matches the `go` directive in go.mod. Avoids the
-      # "linter built with an older Go than the target" failure that the
-      # prebuilt action binary hits on bleeding-edge Go releases.
+      # Cache the golangci-lint binary so we don't recompile it every run.
+      # Keyed on the pinned version + go.mod (rebuilds if the Go toolchain bumps).
+      - name: Cache golangci-lint
+        id: cache-golangci
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin/golangci-lint
+          key: golangci-${{ runner.os }}-${{ env.GOLANGCI_LINT_VERSION }}-${{ hashFiles('go.mod') }}
+      # Build it with the project's own toolchain so its build version always
+      # matches the `go` directive in go.mod (prebuilt binaries lag behind
+      # bleeding-edge Go and fail the "built with an older Go" check).
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+        if: steps.cache-golangci.outputs.cache-hit != 'true'
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${{ env.GOLANGCI_LINT_VERSION }}
       - name: Run golangci-lint
-        run: golangci-lint run
+        run: $(go env GOPATH)/bin/golangci-lint run
 
   # Runs when the caller has no DB-backed tests (needs-db: false).
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: lint
     if: ${{ !inputs.needs-db }}
     steps:
@@ -55,6 +69,7 @@ jobs:
   test-db:
     name: Test (with DB)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: lint
     if: ${{ inputs.needs-db }}
     services:
@@ -98,6 +113,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # One of test / test-db is always skipped depending on needs-db. The `if`
     # below lets build proceed past the skipped one and only stops on a real
     # failure or cancellation (the documented workaround for skipped deps).
